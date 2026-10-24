@@ -26,7 +26,9 @@ jobs:
             libglm-dev \
             libglfw3-dev \
             libglew-dev \
-            libyaml-cpp-dev
+            libyaml-cpp-dev \
+            libvulkan-dev \
+            mesa-vulkan-drivers
 
       - name: Configure CMake
         run: cmake -S . -B build
@@ -36,3 +38,6 @@ jobs:
 
       - name: Build
         run: cmake --build build --config Release --parallel
+
+      - name: Test Vulkan runtime bootstrap
+        run: ctest --test-dir build --output-on-failure
