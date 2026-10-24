@@ -15,6 +15,43 @@ find_package(glm REQUIRED)
 find_package(assimp REQUIRED)
 find_package(yaml-cpp REQUIRED)
 
+# Vulkan shader sources are compiled to SPIR-V even while the existing OpenGL
+# renderer remains the active runtime backend. This lets CI validate both
+# shader languages before the Vulkan backend is introduced.
+find_program(GLSLANG_VALIDATOR NAMES glslangValidator REQUIRED)
+set(SF_SHADER_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/shaders")
+
+function(sf_compile_shader source stage language output_name)
+    set(output "${SF_SHADER_OUTPUT_DIR}/${output_name}.spv")
+    if(language STREQUAL "HLSL")
+        add_custom_command(
+            OUTPUT "${output}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${SF_SHADER_OUTPUT_DIR}"
+            COMMAND "${GLSLANG_VALIDATOR}" -D -V --target-env vulkan1.1 -S "${stage}" -e main -o "${output}" "${CMAKE_CURRENT_SOURCE_DIR}/${source}"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${source}"
+            COMMENT "Compiling HLSL shader: ${source}"
+            VERBATIM
+        )
+    else()
+        add_custom_command(
+            OUTPUT "${output}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${SF_SHADER_OUTPUT_DIR}"
+            COMMAND "${GLSLANG_VALIDATOR}" -V --target-env vulkan1.1 -S "${stage}" -o "${output}" "${CMAKE_CURRENT_SOURCE_DIR}/${source}"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${source}"
+            COMMENT "Compiling GLSL shader: ${source}"
+            VERBATIM
+        )
+    endif()
+    set(SF_COMPILED_SHADERS ${SF_COMPILED_SHADERS} "${output}" PARENT_SCOPE)
+endfunction()
+
+sf_compile_shader("res/shaders/vulkan/glsl/mesh.vert" vert GLSL "mesh_glsl_vert")
+sf_compile_shader("res/shaders/vulkan/glsl/mesh.frag" frag GLSL "mesh_glsl_frag")
+sf_compile_shader("res/shaders/vulkan/hlsl/mesh.vert.hlsl" vert HLSL "mesh_hlsl_vert")
+sf_compile_shader("res/shaders/vulkan/hlsl/mesh.frag.hlsl" frag HLSL "mesh_hlsl_frag")
+
+add_custom_target(sf_vulkan_shaders ALL DEPENDS ${SF_COMPILED_SHADERS})
+
 file(GLOB_RECURSE SRC_FILES
     src/*.cpp
     src/*.c
@@ -27,6 +64,7 @@ file(GLOB IMGUI_SRC
 )
 
 add_executable(${PROJECT_NAME} src/main.cpp ${SRC_FILES})
+add_dependencies(${PROJECT_NAME} sf_vulkan_shaders)
 target_sources(${PROJECT_NAME} PRIVATE ${IMGUI_SRC})
 
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
