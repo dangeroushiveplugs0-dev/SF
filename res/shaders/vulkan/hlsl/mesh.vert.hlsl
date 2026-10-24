@@ -26,7 +26,7 @@ VertexOutput main(VertexInput input)
     VertexOutput output;
     float4 world = mul(model, float4(input.position, 1.0));
     output.worldPosition = world.xyz;
-    output.worldNormal = normalize(mul(transpose(inverse((float3x3)model)), input.normal));
+    output.worldNormal = normalize(mul((float3x3)model, input.normal));
     output.texCoord = input.texCoord;
     output.position = mul(projection, mul(view, world));
     return output;
