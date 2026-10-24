@@ -89,3 +89,18 @@ target_link_libraries(sf_vulkan_probe PRIVATE Vulkan::Vulkan)
 
 enable_testing()
 add_test(NAME sf_vulkan_runtime_smoke COMMAND sf_vulkan_probe)
+
+
+# Window-surface probe runs independently from the active OpenGL application.
+add_executable(sf_vulkan_surface_probe
+    tests/vulkan_surface_probe_main.cpp
+    src/VulkanWindowSurface.cpp
+)
+target_include_directories(sf_vulkan_surface_probe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(sf_vulkan_surface_probe PRIVATE Vulkan::Vulkan glfw)
+
+find_program(XVFB_RUN xvfb-run REQUIRED)
+add_test(
+    NAME sf_vulkan_window_surface_smoke
+    COMMAND ${XVFB_RUN} -a $<TARGET_FILE:sf_vulkan_surface_probe>
+)
