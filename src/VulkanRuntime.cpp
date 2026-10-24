@@ -1,5 +1,6 @@
 #include "VulkanRuntime.hpp"
 
+#include <limits>
 #include <vector>
 
 VulkanRuntime::~VulkanRuntime() {
@@ -8,6 +9,7 @@ VulkanRuntime::~VulkanRuntime() {
 
 bool VulkanRuntime::initializeHeadless(
     std::string& deviceName,
+    uint32_t& graphicsQueueFamilyIndex,
     std::string& errorMessage
 ) {
     if (m_instance != VK_NULL_HANDLE) {
@@ -59,13 +61,42 @@ bool VulkanRuntime::initializeHeadless(
         return false;
     }
 
-    VkPhysicalDeviceProperties properties{};
-    vkGetPhysicalDeviceProperties(devices.front(), &properties);
-    deviceName = properties.deviceName;
-    return true;
+    for (VkPhysicalDevice device : devices) {
+        uint32_t queueFamilyCount = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+        if (queueFamilyCount == 0) {
+            continue;
+        }
+
+        std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(
+            device, &queueFamilyCount, queueFamilies.data()
+        );
+
+        for (uint32_t index = 0; index < queueFamilyCount; ++index) {
+            const VkQueueFamilyProperties& family = queueFamilies[index];
+            if (family.queueCount > 0 &&
+                (family.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0) {
+                VkPhysicalDeviceProperties properties{};
+                vkGetPhysicalDeviceProperties(device, &properties);
+
+                m_physicalDevice = device;
+                m_graphicsQueueFamilyIndex = index;
+                deviceName = properties.deviceName;
+                graphicsQueueFamilyIndex = index;
+                return true;
+            }
+        }
+    }
+
+    errorMessage = "Vulkan devices were found, but none exposes a graphics-capable queue family";
+    shutdown();
+    return false;
 }
 
 void VulkanRuntime::shutdown() {
+    m_physicalDevice = VK_NULL_HANDLE;
+    m_graphicsQueueFamilyIndex = UINT32_MAX;
     if (m_instance != VK_NULL_HANDLE) {
         vkDestroyInstance(m_instance, nullptr);
         m_instance = VK_NULL_HANDLE;
