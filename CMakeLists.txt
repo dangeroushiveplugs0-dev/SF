@@ -14,6 +14,7 @@ find_package(glfw3 REQUIRED)
 find_package(glm REQUIRED)
 find_package(assimp REQUIRED)
 find_package(yaml-cpp REQUIRED)
+find_package(Vulkan REQUIRED)
 
 # Vulkan shader sources are compiled to SPIR-V even while the existing OpenGL
 # renderer remains the active runtime backend. This lets CI validate both
@@ -75,4 +76,16 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/imgui/backends
 )
 
-target_link_libraries(${PROJECT_NAME} glfw OpenGL::GL assimp yaml-cpp)
+target_link_libraries(${PROJECT_NAME} glfw OpenGL::GL assimp yaml-cpp Vulkan::Vulkan)
+
+# Headless smoke test: verifies Vulkan loader/instance initialization and
+# physical-device enumeration without changing the active OpenGL renderer.
+add_executable(sf_vulkan_probe
+    tests/vulkan_probe_main.cpp
+    src/VulkanRuntime.cpp
+)
+target_include_directories(sf_vulkan_probe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(sf_vulkan_probe PRIVATE Vulkan::Vulkan)
+
+enable_testing()
+add_test(NAME sf_vulkan_runtime_smoke COMMAND sf_vulkan_probe)
