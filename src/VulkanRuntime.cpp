@@ -1,6 +1,5 @@
 #include "VulkanRuntime.hpp"
 
-#include <limits>
 #include <vector>
 
 VulkanRuntime::~VulkanRuntime() {
@@ -29,16 +28,16 @@ bool VulkanRuntime::initializeHeadless(
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
 
-    const VkResult createResult = vkCreateInstance(&createInfo, nullptr, &m_instance);
-    if (createResult != VK_SUCCESS) {
+    VkResult result = vkCreateInstance(&createInfo, nullptr, &m_instance);
+    if (result != VK_SUCCESS) {
         errorMessage = "vkCreateInstance failed with VkResult " +
-            std::to_string(static_cast<int>(createResult));
+            std::to_string(static_cast<int>(result));
         m_instance = VK_NULL_HANDLE;
         return false;
     }
 
     uint32_t deviceCount = 0;
-    VkResult result = vkEnumeratePhysicalDevices(m_instance, &deviceCount, nullptr);
+    result = vkEnumeratePhysicalDevices(m_instance, &deviceCount, nullptr);
     if (result != VK_SUCCESS) {
         errorMessage = "vkEnumeratePhysicalDevices(count) failed with VkResult " +
             std::to_string(static_cast<int>(result));
@@ -61,31 +60,60 @@ bool VulkanRuntime::initializeHeadless(
         return false;
     }
 
-    for (VkPhysicalDevice device : devices) {
+    for (VkPhysicalDevice candidate : devices) {
         uint32_t queueFamilyCount = 0;
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+        vkGetPhysicalDeviceQueueFamilyProperties(candidate, &queueFamilyCount, nullptr);
         if (queueFamilyCount == 0) {
             continue;
         }
 
         std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
         vkGetPhysicalDeviceQueueFamilyProperties(
-            device, &queueFamilyCount, queueFamilies.data()
+            candidate, &queueFamilyCount, queueFamilies.data()
         );
 
         for (uint32_t index = 0; index < queueFamilyCount; ++index) {
             const VkQueueFamilyProperties& family = queueFamilies[index];
-            if (family.queueCount > 0 &&
-                (family.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0) {
-                VkPhysicalDeviceProperties properties{};
-                vkGetPhysicalDeviceProperties(device, &properties);
-
-                m_physicalDevice = device;
-                m_graphicsQueueFamilyIndex = index;
-                deviceName = properties.deviceName;
-                graphicsQueueFamilyIndex = index;
-                return true;
+            if (family.queueCount == 0 ||
+                (family.queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0) {
+                continue;
             }
+
+            m_physicalDevice = candidate;
+            m_graphicsQueueFamilyIndex = index;
+
+            const float queuePriority = 1.0f;
+            VkDeviceQueueCreateInfo queueInfo{};
+            queueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            queueInfo.queueFamilyIndex = index;
+            queueInfo.queueCount = 1;
+            queueInfo.pQueuePriorities = &queuePriority;
+
+            VkDeviceCreateInfo deviceInfo{};
+            deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+            deviceInfo.queueCreateInfoCount = 1;
+            deviceInfo.pQueueCreateInfos = &queueInfo;
+
+            result = vkCreateDevice(m_physicalDevice, &deviceInfo, nullptr, &m_device);
+            if (result != VK_SUCCESS) {
+                errorMessage = "vkCreateDevice failed with VkResult " +
+                    std::to_string(static_cast<int>(result));
+                shutdown();
+                return false;
+            }
+
+            vkGetDeviceQueue(m_device, index, 0, &m_graphicsQueue);
+            if (m_graphicsQueue == VK_NULL_HANDLE) {
+                errorMessage = "Vulkan logical device was created, but its graphics queue is null";
+                shutdown();
+                return false;
+            }
+
+            VkPhysicalDeviceProperties properties{};
+            vkGetPhysicalDeviceProperties(m_physicalDevice, &properties);
+            deviceName = properties.deviceName;
+            graphicsQueueFamilyIndex = index;
+            return true;
         }
     }
 
@@ -95,8 +123,15 @@ bool VulkanRuntime::initializeHeadless(
 }
 
 void VulkanRuntime::shutdown() {
+    if (m_device != VK_NULL_HANDLE) {
+        vkDeviceWaitIdle(m_device);
+        vkDestroyDevice(m_device, nullptr);
+        m_device = VK_NULL_HANDLE;
+    }
+    m_graphicsQueue = VK_NULL_HANDLE;
     m_physicalDevice = VK_NULL_HANDLE;
     m_graphicsQueueFamilyIndex = UINT32_MAX;
+
     if (m_instance != VK_NULL_HANDLE) {
         vkDestroyInstance(m_instance, nullptr);
         m_instance = VK_NULL_HANDLE;
