@@ -67,3 +67,7 @@ After all constraints are satisfied, velocities are updated for the next substep
 $$\mathbf{v}^{n+1} = \frac{\mathbf{x}^{n+1} - \mathbf{x}^n}{\Delta t_s}.$$
 
 This process repeats for each substep until the full frame time $\Delta t$ is consumed.
+
+## Origin and Attribution
+
+This project began as a fork of [XPBD Softbody Simulator by Frederic Hallein](https://github.com/frederic-hallein/xpbd-softbody-simulator). It is now maintained independently by the creator of this repository and is no longer connected to the upstream repository through GitHub's fork network. The project may retain code and technical material from the original work; the original MIT license and copyright notice are preserved in [`LICENSE`](LICENSE). This project is not affiliated with or endorsed by the original author.
